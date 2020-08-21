@@ -1,0 +1,304 @@
+---
+title: "ex in HUJI 3"
+output: html_document
+---
+
+------A------
+```{r}
+library (dplyr)
+library(olsrr)
+library (MASS)
+#load dataset
+data <- read.csv("gm_cars_dataset.csv")
+#linear model
+model<- lm(Price~Mileage, data=data)
+#observ the data
+summary(model)
+#check AIC = 17061.63
+AIC(model,k=2)
+#check BIC = 17075.7
+BIC(model)
+```
+
+------B------
+```{r}
+plot(data$Mileage,data$Price)
+abline(lm(Price ~ Mileage,data=data),col = "red")
+#show the linear line compered to the exeption
+
+```
+
+
+
+
+------C------
+```{r}
+big_model<- lm(Price~Mileage +Cylinder+ Doors+ Cruise+ Sound+ Leather+ Liter, data=data)
+summary(big_model)
+#model without Liter
+big_model2 <- lm(Price~Mileage +Cylinder+ Doors+ Cruise+ Sound + Leather, data=data) 
+#check AIC = 17061.63
+AIC(big_model,k=2)
+#check BIC = 17075.7
+BIC(big_model)
+# cp check with the full model and the one without 'Liter'
+ols_mallows_cp(big_model2,big_model ) 
+# cp check with the full model and the one only with 'mileage'
+ols_mallows_cp(model,big_model) 
+
+
+```
+
+
+------D------
+```{r}
+r<- resid(big_model)
+hist(r)
+qqnorm(r)
+sum <- sum(r)
+av.r <- sum/length(r)
+round(av.r, 7)
+#make standard
+sre <- rstandard(big_model)
+#check hetro
+p.y <- big_model$fitted.values
+plot(x= sre,y= p.y, xlab = "standard resid", ylab = "price prediction", cex=0.5)
+re <- stdres(big_model)
+#extract standard 
+
+coll.ans <- ols_coll_diag(big_model)
+coll.ans
+eee = coll.ans$eig_cindex
+round(eee,digits=4)
+ans <- ols_coll_diag(big_model)
+View(ans$vif_t)
+```
+
+
+```{r}
+library(MASS)
+library(olsrr)
+library(RCurl)
+library(Hmisc)
+library(bestglm)
+```
+1:
+```{r}
+
+data(Boston)
+Boston <- as.data.frame(Boston[,-which(names(Boston) %in% c("chas","rad"))])
+#A
+n <- nrow(Boston)
+p <- ncol(Boston)-1
+Y <- Boston$medv
+X <- cbind(rep(1,n), Boston[,-which(names(Boston) %in% c("medv"))])
+colnames(X)[1] <- "intercept"
+reg <- lm(medv~., data = Boston)
+beta_hat <- solve(t(X) %*% as.matrix(X)) %*% t(X) %*% as.matrix(Y)  
+G <- solve(t(X) %*% as.matrix(X))
+P <- as.matrix(X) %*% G %*% t(X)
+
+
+f <- function(i){
+  
+  X_i <- X[-i,]
+  Y_i <- Y[-i]
+  reg_i <- lm(medv~., data = Boston[-i,])
+
+  mone <- G %*% (t(X[i,]) %*% as.matrix(X[i,])) %*% G
+  mehane <- 1-(as.matrix(X[i,]) %*% G %*% t(X[i,]))
+  inv_G_i <- G + as.numeric(1/mehane) * mone
+  beta_hat_i <- inv_G_i %*% t(X_i) %*% as.matrix(Y_i)
+  
+  # DFBETA 
+  DFBETA <- beta_hat - beta_hat_i
+  # DFBETAS
+  e_i <- resid(reg_i)
+  s_i <- sqrt(t(e_i) %*% e_i/(n-p-2)) 
+  DFBETAS <- DFBETA/(rep(s_i,p+1)*sqrt(diag(G)))
+  # DFFIT
+  Y_hat <- reg$fitted.values[i]
+  Y_hat_i <- as.matrix(X[i,]) %*% beta_hat_i
+  DFFIT <- Y_hat - Y_hat_i 
+  # DFFITS
+  DFFITS <- DFFIT/(s_i * sqrt(P[i,i]))
+
+  return (list(round(DFBETA,4), round(DFBETAS,4), round(DFFIT,4), round(DFFITS,4)))
+}
+
+#B:
+Q <- diag(n) - P
+e <- resid(reg)
+s <- sqrt(t(e) %*% e/(n-p-1))
+r <- e/(rep(s,n) * sqrt(diag(Q)))
+outliers <- which(abs(r)>2.3) 
+# 162 is an outlier
+# compare results
+DFBETA <- cbind(f(162)[[1]], f(1)[[1]]) 
+DFBETAS <- cbind(f(162)[[2]], f(1)[[2]])
+DFFIT_S <- c(f(162)[[3]], f(1)[[3]], f(162)[[4]], f(1)[[4]])
+```
+3:
+```{r}
+sprt_vec<-function(n,value){
+  u <- runif(n,min=0,max=1)
+  v <- c()
+  for (i in 1:n){
+    if (u[i]>value){
+      v <- c(v,FALSE)
+    }else{
+      v <- c(v,TRUE)
+    }
+  }
+  return(v)
+}
+
+
+gm<- read.csv("gm_cars_dataset.csv")
+n <-length(gm$Price)
+v <-sprt_vec(n,0.85)
+gm85 <- gm[v,]
+gm85_ <- subset(gm85, select = -c(1))
+gm15 <- gm[v==FALSE,]
+
+ctgor <- c("Make","Model","Trim","Type")
+numat <- cbind(gm85[,c("Price","Mileage","Liter","Cylinder","Doors","Cruise","Sound","Leather")])
+round(cor(numat),2) # multi between cylinder to liter
+numat$u1 <- (numat$Liter+numat$Cylinder)/2
+numat$u2 <- (numat$Liter-numat$Cylinder)
+numat$Cylinder<-NULL
+numat$Liter<-NULL
+round(cor(numat),2) # now without multi
+
+# plot
+plot(gm85$Price,gm85$Mileage,main="Price VS Mileage",col='red')
+plot(gm85$Price,gm85$Liter  ,main="Price VS Liter",col='blue') # somewhere between categor to continuous
+
+# stepAIC
+reg.min = lm(Price~Mileage, data=gm85)
+reg.full= lm(Price~Mileage + Cylinder + Doors + Cruise + Sound + Leather + Liter, data=gm85)
+
+# forward
+forw <- summary(stepAIC(reg.min, scope=list(lower=formula(reg.min), 
+        upper=formula(reg.full)), direction='forward', k=2))
+
+# backwards
+back <- summary(stepAIC(reg.full, scope=list(lower=formula(reg.min), 
+        upper=formula(reg.full)), direction='backward', k=2))
+
+# stepwise
+both <- summary(stepAIC(reg.min, scope=list(lower=formula(reg.min), 
+        upper=formula(reg.full)), direction='both', k=2))
+
+# compare
+comp <- rbind(sort(forw$coef[,"Estimate"]),
+              sort(back$coef[,"Estimate"]),
+              sort(both$coef[,"Estimate"]))
+row.names(comp) <- c("forward","backward","both")
+round(comp,3) # we can see that the results are the same
+
+# bestglm
+bestglm(gm85_)
+
+
+# analysis gm15
+model3 <-lm(Price~Cylinder+Cruise+Leather+Mileage+Doors+Sound,data=gm15)
+
+#histogram of residuals
+e<-resid(model3)
+avr_e <- sum(e)/length(e)
+var_e <- sd(e)
+
+# histogram
+hist(e, breaks=30,col="blue",freq=FALSE,xlim = c(-16000,32000))
+curve(dnorm(x,avr_e,var_e),add=TRUE,col="darkblue",lwd=4)
+
+# QQ Plot
+qqnorm(e)
+qqline(e)
+
+# R Squere
+r_result2 <- summary(model3)$r.squared
+
+# adj R squere
+adj_r2 <- ((n-1)/(n-8))*(1-r_result2)
+
+# Mallow's Cp
+cp2<-ols_mallows_cp(model3, lm(Price~Cylinder+Cruise+Leather+Mileage+Doors,data=gm15))
+
+# Aic
+aic2 <- AIC(model3)
+
+# Bic
+bic2 <- BIC(model3)
+
+# equalization
+tiv <- c(r_result2,adj_r2,cp2,aic2,bic2)
+names(tiv)<-c('Rsqure','adjr','cp','aic','bic')
+round(tiv,3)
+
+```
+
+
+4:
+```{r}
+names <- c('id_number', 'diagnosis', 'radius_mean', 
+           'texture_mean', 'perimeter_mean', 'area_mean', 
+           'smoothness_mean', 'compactness_mean', 
+           'concavity_mean','concave_points_mean', 
+           'symmetry_mean', 'fractal_dimension_mean',
+           'radius_se', 'texture_se', 'perimeter_se', 
+           'area_se', 'smoothness_se', 'compactness_se', 
+           'concavity_se', 'concave_points_se', 
+           'symmetry_se', 'fractal_dimension_se', 
+           'radius_worst', 'texture_worst', 
+           'perimeter_worst', 'area_worst', 
+           'smoothness_worst', 'compactness_worst', 
+           'concavity_worst', 'concave_points_worst', 
+           'symmetry_worst', 'fractal_dimension_worst')
+breast_cancer <- read.table('wdbc.data', sep = ',', col.names = names)
+breast_cancer$diagnosis <- ifelse(breast_cancer$diagnosis=="M",1,0)
+
+#A
+obs <- breast_cancer[(breast_cancer$id_number == 854039),]
+breast_cancer <- breast_cancer[breast_cancer$id_number!="854039",]
+
+model <- glm(diagnosis ~ area_mean  + texture_mean + perimeter_mean  , family=binomial(link='logit') ,data=breast_cancer) 
+summary(model)
+
+# add the prediction to the data 
+breast_cancer$pred <- model$fitted.values
+
+# plot prediction 
+plot(pred~area_mean, data=breast_cancer)
+plot(pred~texture_mean, data=breast_cancer)
+plot(pred~perimeter_mean, data=breast_cancer)
+
+#B:
+b1 <- model$coefficients[2]
+se_b1 <- sqrt(diag(vcov(model)))[2]
+z_crit <- qnorm(0.975)
+
+CI_b1 <- c(b1-z_crit*se_b1, b1+z_crit*se_b1)
+CI_b1
+
+#c:
+x <- c(1, obs$area_mean, obs$texture_mean ,obs$perimeter_mean)
+g <- function(u) {
+  exp(u)/(1+exp(u))
+}
+
+bx <-sum(x*model$coefficients)
+p <- exp(bx)/(1 +exp(bx))
+s <- sqrt(t(x) %*% vcov(model) %*% x)
+
+CI_bx <- c(bx - s*qnorm(0.975), bx + s*qnorm(0.975))
+CI_P <- c(g(CI_bx[1]), g(CI_bx[2]))
+CI_P
+
+# predict model on this observation
+p_hat <- predict(model, newdata=obs, type='response')
+p_hat
+
+```
+

@@ -1,0 +1,270 @@
+---
+title: "ex in HUJI 2"
+output: html_document
+---
+###### Regression-Outline-Weeks1to6
+
+WEEK 1
+intro - what is regression
+simple linear regression
+multiple linear regression - least squares estimator
+linear algebra background
+projections and projection matrices
+
+WEEK 2
+expectation and covariance matrices of random vectors
+moment properties least squares estimates
+estimation of error variance
+Gauss-Markov
+consistency of LS estimator
+background on multivariate distributions
+multivariate normal distribution and its properties
+chi-square distribution
+t distribution
+chi-square distribution of squared norm of projection of N(0,I) random vector
+distribution properties of LS estimators
+
+WEEK 3
+multivariate central limit theorems (CLT)
+tests and confidence intervals for a single regression coefficient
+tests and confidence intervals for a linear combo of coefficients
+justification based on CLT for normal-theory tests with non-normal errors
+
+WEEK 4
+residual analysis
+multicollinearity
+
+WEEK 5
+binary variables
+handling categorical variables using dummy variables
+preliminary analysis of data
+illustration of the concepts on a dataset
+
+WEEK 6
+multicollinearity wrap-up - proportion of variance table
+influential data points
+the least squares estimates as maximum likelihood estimates under normal errors
+overfitting
+measures of model goodness: adjusted R2, Mallows Cp, AIC, BIC
+
+measures of model goodness: adjusted R2, Mallows Cp, AIC, BIC
+
+Week 1 was devoted to developing the least squares estimator and its algebraic properties.
+Weeks 2 and 3 were devoted to the distributional properties of the least squares estimates, confidence intervals, and hypothesis tests.
+In order to present this material we needed some background on working with random vectors and the multivariate normal distribution.
+By the end of Week 3, we covered the basic statistical theory of the least squares estimators.
+Weeks 4, 5, and 6 were devoted mainly to practical aspects of regression.
+In principle, I should have finished with multicollinearity in Week 4, but I didn't manage to cover the proportion of variance table.
+I decided to put off the completion of multicollinearity to Week 6 because in Week 5 I wanted to be able to show regression in action with a dataset.
+Week 6 was devoted mostly to practical topics. I put in the topic maximum likelihood estimation, which is a theoretical topic, because I needed the concept
+of likelihood to explain AIC and BIC.
+
+```{r}
+library(tidyverse)
+install.packages("dummies")
+library(dummies)
+install.packages("oslrr")
+library(olsrr)
+```
+
+# Question 1
+
+## Question 1-a
+
+```{r}
+data <- read.csv("q1_df.csv")
+categ <- data.frame(val = c(data$categ))
+table(categ$val)
+length(table(categ$val))
+```
+
+## Question 1-b
+
+```{r}
+data <- data %>% arrange(desc(categ))
+ifelse(data$categ == '0', 1, 0)
+ifelse(data$categ == '1', 1, 0)
+ifelse(data$categ == '2', 1, 0)
+ifelse(data$categ == '3', 1, 0)
+```
+
+## Question 1-c
+
+```{r}
+x_df <- as.matrix(data.frame(b0 = 1, x1 = data$x, x2 = ifelse(data$categ == '0', 1, 0), x3 = ifelse(data$categ == '1', 1, 0), x4 = ifelse(data$categ == '2', 1, 0), x5 = ifelse(data$categ == '3', 1, 0)))
+```
+
+# Question 2
+
+## Question 2-a
+
+```{r}
+fish <- read.csv("fish.csv")
+summary(fish)
+```
+
+## Question 2-b
+
+```{r}
+names(fish) <- c("Species", "Weight", "Length1", "Length2", "Length3", "Height", "Width")
+
+the.levels <- levels(factor(fish$Species))
+the.levels
+
+bar_df <- fish %>% group_by(fish$Species) %>% summarise(frequency = n())
+names(bar_df) <- c("Species", "Frequency")
+
+dm <- data.frame(dummy(fish$Species))
+
+barplot(bar_df$Frequency, names.arg = bar_df$Species, cex.names = 0.8)
+```
+
+## Question 2-d
+
+```{r}
+fish_model <- fish %>% lm(formula = Weight ~ dm$Species.Bream + dm$Species.Parkki + dm$Species.Perch + dm$Species.Pike + dm$Species.Roach + dm$Species.Smelt + Width + Height + Length3 + Length2 + Length1)
+summary(fish_model)
+```
+
+## Question 2-e
+
+```{r}
+calculate_p_val <- summary(fish_model)$coef[2:12,"Pr(>|t|)"]
+name.of.p <- names(calculate_p_val)
+
+accept <- c()
+rejuct <- c()
+for (i in 1:length(calculate_p_val)){
+  if (calculate_p_val[i] < 0.05){
+    rejuct <- c(rejuct, name.of.p[i])
+  }else{
+    accept <- c(accept, name.of.p[i])
+  }
+}
+
+# rejuct for:
+rejuct
+# accept for:
+accept
+```
+
+## Question 2-f
+
+```{r}
+r_square <- summary(fish_model)$r.squared
+# The R squared value of our model is:
+r_square
+```
+
+## Question 2-g
+
+```{r}
+coll_ans <- ols_coll_diag(fish_model)
+coll_ans
+round(coll_ans$eig_cindex, digits = 3)
+```
+
+## Question 2-h
+
+```{r}
+fish_new_model <- fish %>% lm(formula = Weight ~ dm$Species.Bream + dm$Species.Parkki + dm$Species.Perch + dm$Species.Pike + dm$Species.Roach + dm$Species.Smelt + Width + Height + Length1)
+r_square_2 <- summary(fish_new_model)$r.squared
+r_square_2
+```
+
+## Question 2-i
+
+```{r}
+coll_ans2 <- ols_coll_diag(fish_new_model)
+coll_ans2
+round(coll_ans2$eig_cindex, digits = 3)
+```
+
+## Question 2-j
+
+```{r}
+re <- resid(fish_new_model)
+avr.re <- sum(re)/length(re)
+var.re <- sd(re)
+
+hist(re,freq=FALSE)
+curve(dnorm(x,avr.re,var.re),add=TRUE)
+qqnorm(re)
+qqline(re)
+```
+
+# Question 3
+
+```{r}
+q3_df1_data <- read.csv("q3_df1.csv", header=TRUE)
+q3_df2_data <- read.csv("q3_df2.csv", header=TRUE)
+q3_df3_data <- read.csv("q3_df3.csv", header=TRUE)
+q3_df4_data <- read.csv("q3_df4.csv", header=TRUE)
+
+# First, we will check the multicolinarity:
+
+q3_df1_lm <- lm(Y ~ V1 + V2 + V3 + V4, data = q3_df1_data)
+summary(q3_df1_lm)
+
+q3_df2_lm <- lm(Y ~ V1 + V2 + V3 + V4, data = q3_df2_data)
+summary(q3_df2_lm)
+
+q3_df3_lm <- lm(Y ~ V1 + V2 + V3 + V4, data = q3_df3_data)
+summary(q3_df3_lm)
+
+q3_df4_lm <- lm(Y ~ V1 + V2 + V3 + V4, data = q3_df4_data)
+summary(q3_df4_lm)
+
+ourdat_df1 = cbind(q3_df1_data$V1, q3_df1_data$V2, q3_df1_data$V3, q3_df1_data$V4)
+ourdat_df2 = cbind(q3_df2_data$V1, q3_df2_data$V2, q3_df2_data$V3, q3_df2_data$V4)
+ourdat_df3 = cbind(q3_df3_data$V1, q3_df3_data$V2, q3_df3_data$V3, q3_df3_data$V4)
+ourdat_df4 = cbind(q3_df4_data$V1, q3_df4_data$V2, q3_df4_data$V3, q3_df4_data$V4)
+
+round(cor(ourdat_df1),digits=3) # There is a multicolinarity between V1 and V4
+round(cor(ourdat_df2),digits=3) # No multicolinarity
+round(cor(ourdat_df3),digits=3) # There is a multicolinarity between V1 and V3
+round(cor(ourdat_df4),digits=3) # No multicolinarity
+
+# Now we will check interactions:
+
+q3_df1_lm1 <- lm(Y ~ V1 + V2 + V3 + V4 + I(V1*V2) + I(V1*V3) + I(V1*V4) + I(V2*V3) + I(V2*V4) + I(V3*V4), data = q3_df1_data)
+summary(q3_df1_lm1)
+
+q3_df1_lm2 <- lm(Y ~ V1 + V2 + V3 + V4 + I(V1*V2) + I(V1*V4) + I(V2*V4) + I(V3*V4), data = q3_df1_data)
+summary(q3_df1_lm2)
+
+q3_df1_lm3 <- lm(Y ~ V1 + V2 + V3 + V4 + I(V1*V2), data = q3_df1_data)
+summary(q3_df1_lm3)
+
+# No interactions in "q3_df1"
+
+q3_df2_lm1 <- lm(Y ~ V1 + V2 + V3 + V4 + I(V1*V2) + I(V1*V3) + I(V1*V4) + I(V2*V3) + I(V2*V4) + I(V3*V4), data = q3_df2_data)
+summary(q3_df2_lm1)
+
+q3_df2_lm2 <- lm(Y ~ V1 + V2 + V3 + V4 + I(V1*V3) + I(V2*V3) + I(V2*V4), data = q3_df2_data)
+summary(q3_df2_lm2)
+
+# No interactions in "q3_df2"
+
+q3_df3_lm1 <- lm(Y ~ V1 + V2 + V3 + V4 + I(V1*V2) + I(V1*V3) + I(V1*V4) + I(V2*V3) + I(V2*V4) + I(V3*V4), data = q3_df3_data)
+summary(q3_df3_lm1)
+
+q3_df3_lm2 <- lm(Y ~ V1 + V2 + V3 + V4 + I(V1*V2) + I(V2*V3) + I(V3*V4), data = q3_df3_data)
+summary(q3_df3_lm2)
+
+# Interactions in "q3_df3"
+
+q3_df4_lm1 <- lm(Y ~ V1 + V2 + V3 + V4 + I(V1*V2) + I(V1*V3) + I(V1*V4) + I(V2*V3) + I(V2*V4) + I(V3*V4), data = q3_df4_data)
+summary(q3_df4_lm1)
+
+q3_df4_lm2 <- lm(Y ~ V1 + V2 + V3 + V4 + I(V1*V3) + I(V2*V4), data = q3_df4_data)
+summary(q3_df4_lm2)
+
+# Interactions in "q3_df4"
+
+# FINAL ANSWER:
+# q3_df1: Have multicolinarity & don't have interactions. 
+# In q3_df2: Don't have multicolinarity & don't have interactions.
+# In q3_df3: Have multicolinarity & have interactions.
+# In q3_df4:Don't have multicolinarity & have interactions.
+```
