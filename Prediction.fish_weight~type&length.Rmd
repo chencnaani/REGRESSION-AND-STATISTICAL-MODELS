@@ -1,0 +1,140 @@
+---
+title: "fish new"
+output: html_document
+---
+
+```{r}
+library(olsrr)
+library(dummies) 
+library(MASS)
+library(ggplot2)
+
+fish <- read.csv("Fish.csv",header = T)
+head(fish)
+names(fish)[1] <-  "Species" # adjust variable name
+# a: description of the variables
+summary(fish)
+# Species is a categorical variable with 7 possible values
+
+# b: bar-plot
+ggplot(data= fish,aes(x=Species)) + geom_bar()
+
+# c: Yes. Species should be broken into 7 binary variables,
+#     only 6 of which should be included in the model. The omitted one is the "basis" for beta_0.
+
+```
+```{r}
+
+# d: build a model
+
+dum <- dummy(fish$Species, sep = ".")
+new_fish <- cbind(fish[,-1], dum)
+model <- lm(Weight ~. , data = new_fish[,-ncol(new_fish)])
+summary(model) 
+
+# e: Species.Pike and Species.Smelt, this indicates that fish from those species have different weights than from other species, given the same
+# values of other parameters. 
+# Note that Whitefish is our baseline hence omittied. Note that if you chose other basis, you could have got other significant Species. 
+# Length 1 is also significant. Length2 is not for alpha 0.05 but seems to be important since it is for alpha=0.083.
+
+# f: R^2: 0.9361. 93% of the variability in Y is explained by X.
+
+# g,h,i: multicollinearity analysis.
+coll_ans <- ols_coll_diag(model)
+
+coll_ans$vif_t
+# most toleranc and VIF values indicate multicollinearity.
+
+round(cor(new_fish),2)
+# length1, length2, length3 are extremely correlated. They are also very correlated with Height and Width.
+
+round(coll_ans$eig_cindex,3)
+# length2 is almost completly explained by the the factor with the largest condition index. Length 1 is also at large explained by it.
+# width, height are largly explained by the factor with 54.49 condition index. length3 by the factor with 347.65 condition index.
+# all those indicate multicollinearity.
+
+```
+```{r}
+
+# since length1, length2, length3 are so strongly correlated it is almost a state of complete multicollinearity. We will try to remove 2 of them.
+model2 <- lm(Weight ~  Height + Length1 +  Width + 
+               Species.Bream + Species.Parkki + Species.Perch + Species.Pike + Species.Roach + Species.Smelt, data = new_fish)
+
+# R^2 is 0.9309, almost no change. This is because almost all the information in length2 and length3 is already included in the model by adding length1.
+
+coll_ans2 <- ols_coll_diag(model2)
+coll_ans2$vif_t
+round(coll_ans2$eig_cindex, 3)
+# Still all the metrics indicate that there is a problem.
+# We can see that length1, height and some of the species are still part of an approximate linear combination.
+# You should have done another mid step, but we'll remove both Height and Width.
+
+model3 <- lm(Weight ~ Length1 + Species.Bream + Species.Parkki + Species.Perch + Species.Pike + Species.Roach + Species.Smelt, data = new_fish)
+# R^2 still hasn't changed (96.83)
+
+coll_ans3 <- ols_coll_diag(model3)
+coll_ans3$vif_t
+round(coll_ans3$eig_cindex, 3)
+
+# looks much better now.
+# now, after we've learned some model fit metrics (such as BIC, AIC) we can comapre models acording
+# to those metric as well
+# try repeat the previous analysis and looking at AIC and R^2-adjusted 
+
+summary(model) 
+summary(model2) 
+summary(model3) 
+
+```
+```{r}
+
+# j: error analysis
+e <- resid(model3)
+
+#histogram of residuals
+hist(e, breaks=20) # looks skewed
+
+# QQ Plot
+qqnorm(e)
+qqline(e) #confirms skew
+
+# Standartized residuals vs. prediction
+r <- stdres(model3)
+y_hat <- model3$fitted.values
+plot(r, y_hat, xlab = "Standartized Residuals", ylab = "Prediction", cex=0.5)
+
+# Standartized residuals vs. Length1
+plot(r, new_fish$Length1, xlab = "Standartized Residuals", ylab = "Length1", cex=0.5)
+
+# Seems to be a connection between r and y_hat, caused by Length1. Higher values of Length1 have higher residual variance. This looks like heteroscedasticity.
+
+```
+```{r}
+
+# k: Interactions
+
+# create all interactions (you might have used only part of them)
+len_Bream <- new_fish$Length1 * new_fish$Species.Bream
+len_Parkki <- new_fish$Length1 * new_fish$Species.Parkki
+len_Perch <- new_fish$Length1 * new_fish$Species.Perch
+len_Pike <- new_fish$Length1 * new_fish$Species.Pike
+len_Roach <- new_fish$Length1 * new_fish$Species.Roach
+len_Smelt <- new_fish$Length1 * new_fish$Species.Smelt
+
+interact_fish <- data.frame(cbind(new_fish$Weight, new_fish$Length1, new_fish$Species.Bream, new_fish$Species.Parkki, new_fish$Species.Perch, new_fish$Species.Pike, new_fish$Species.Roach, new_fish$Species.Smelt,
+                       len_Bream, len_Parkki, len_Perch, len_Pike, len_Roach, len_Smelt))
+colnames(interact_fish)<- c("Weight", "Length1", "Species.Bream", "Species.Parkki", "Species.Perch", "Species.Pike", "Species.Roach", "Species.Smelt", "len_Bream", "len_Parkki", "len_Perch", "len_Pike", "len_Roach", "len_Smelt")
+model4 <-  lm(Weight ~., data = interact_fish)
+summary(model4)
+
+# re-examine residuals
+
+# Standartized residuals vs. prediction
+r <- stdres(model4)
+y_hat <- model4$fitted.values
+plot(r, y_hat, xlab = "Standartized Residuals", ylab = "Prediction", cex=0.5)
+
+# Standartized residuals vs. Length1
+plot(r, interact_fish$Length1, xlab = "Standartized Residuals", ylab = "Length1", cex=0.5)
+
+# looks significantly better.
