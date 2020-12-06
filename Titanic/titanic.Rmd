@@ -1,0 +1,329 @@
+---
+title: "titanic"
+output: html_document
+---
+
+```{r}
+
+library(dummies) 
+library(dplyr)
+library(bestglm)
+library(tidyverse)
+library(MASS)
+library(data.table)
+library(olsrr)
+library(Hmisc)
+library(GGally)
+library(RCurl)
+library(ggplot2)
+
+
+t_data <- read.csv("titanic.csv")
+data <- t_data
+
+t_inx <- sample(1:nrow(data), 0.85 * nrow(data))
+test_ <- setdiff(1:nrow(data), t_inx)
+train <- data[t_inx, ]
+train_b <- data[t_inx, ]
+
+test <- data[test_, ]
+sex<- dummy(test$Sex,sep = " ")
+test$Male<-sex[,2]
+pclass<-dummy(test$Pclass,sep=" ")
+test$class1<-pclass[,1]
+test$class2<-pclass[,2]
+```
+
+```{r}
+##A##
+desc <- function(inpvar, vname) {
+  n<-sum(!is.na(inpvar))
+  sumry<-summary(inpvar)
+  std<-sd(inpvar, na.rm=T)
+  range<-max(inpvar) - min(inpvar)
+  iqr<-IQR(inpvar, na.rm=T)
+  prbs<-seq(0.05, 0.95, 0.05)
+  prbs<-c(0.01, prbs, 0.99)
+  quant<-quantile(inpvar, probs=prbs, na.rm=T)
+  ans <- list(n=n, sumry=sumry, std=std, range=range, iqr=iqr, quant=quant)
+  print(ans)
+  hist(inpvar, breaks="Scott", freq=F, main = paste("Histogram of" , vname), xlab=vname)
+  return(ans)
+}  
+jpeg("rplot.jpg")
+  par(mfrow=c(2,3))
+
+# a
+desc(train$Survived,'Survived')
+desc(train$Age,'Age')
+desc(train$SibSp,'SibSp') 
+desc(train$Parch,'Parch')
+desc(train$Fare,'Fare')
+dev.off()
+
+```
+
+
+```{r}
+# b
+cont1 = train[,c(2,6)]
+cont2 = train[,c(2,10)]
+jpeg("rplot2.jpg")
+ggscatmat(cont1)
+dev.off()
+jpeg("rplot3.jpg")
+ggscatmat(cont2)
+dev.off()
+
+
+```
+
+
+```{r}
+# c
+cat_freq_plot <- function(var, name) {
+  d <- as.data.frame(table(var))
+  ggplot(data=d, aes(x=d[,1], y=d[,2])) + geom_bar(fill = "blue", colour="black", stat="identity", size=.3) + xlab(name) + theme(axis.text.x = element_text( hjust = 1))
+}
+jpeg("rplot4.jpg")
+  
+cat_freq_plot(train_b$Pclass, "Pclass")
+dev.off()
+jpeg("rplot5.jpg")
+
+cat_freq_plot(train_b$Sex, "Sex")
+dev.off()
+jpeg("rplot6.jpg")
+
+cat_freq_plot(train_b$SibSp, "SibSp")
+dev.off()
+jpeg("rplot7.jpg")
+
+cat_freq_plot(train_b$Parch, "Parch") 
+dev.off()
+jpeg("rplot8.jpg")
+
+cat_freq_plot(train_b$Embarked, "Embarked")
+dev.off()
+
+```
+
+
+```{r}
+# d 
+heat_map <- function(var1, var2,var_name) {
+  d <- as.data.frame(table(var1, var2))
+  print(d)
+  ggplot(data = d, aes(x= d[,1], y=d[,2], fill=d[,3])) + geom_tile() + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + xlab("survived") + ylab(var_name)  
+}
+jpeg("rplot9.jpg")
+
+heat_map(train_b$Survived, train_b$Sex, "sex")
+dev.off()
+jpeg("rplot10.jpg")
+
+heat_map(train_b$Survived, train_b$Fare , "Fare")
+dev.off()
+jpeg("rplot11.jpg")
+
+heat_map(train_b$Survived, train_b$Age, "Age")
+dev.off()
+jpeg("rplot12.jpg")
+
+heat_map(train_b$Survived, train_b$SibSp, "sibsp")
+dev.off()
+jpeg("rplot13.jpg")
+
+heat_map(train_b$Survived, train_b$Parch,"Parch")
+dev.off()
+jpeg("rplot14.jpg")
+
+heat_map(train_b$Survived, train_b$Embarked, "Embarked")
+dev.off()
+jpeg("rplot15.jpg")
+
+heat_map(train_b$Survived, train_b$Pclass, "Pclass")
+dev.off()
+
+
+```
+
+
+```{r}
+# e 
+jpeg("rplot16.jpg")
+
+boxplot(Survived ~Sex, xlab='Sex', ylab='Survived', data=train_b) 
+dev.off()
+jpeg("rplot17.jpg")
+
+boxplot(Survived ~ Age, xlab='Age', ylab='Survived', data=train_b)
+dev.off()
+jpeg("rplot18.jpg")
+
+boxplot(Survived ~ SibSp, xlab='sibsp', ylab='Survived', data=train_b)
+dev.off()
+jpeg("rplot19.jpg")
+
+boxplot(Survived ~ Fare, xlab='Fare', ylab='Survived', data=train_b) 
+dev.off()
+jpeg("rplot20.jpg")
+
+boxplot(Survived ~ Parch, xlab='Parch', ylab='Survived', data=train_b)
+dev.off()
+jpeg("rplot21.jpg")
+
+boxplot(Survived ~ Embarked, xlab='Embarked', ylab='Survived', data=train_b)
+dev.off()
+```
+
+
+```{r}
+##B##
+regg_s <- glm(Survived ~ Age, data=train, family=binomial(link=logit))
+
+regg_f <- glm(Survived~ Age + SibSp + Parch + Fare + Sex + Embarked +Pclass  , data=train, family=binomial(link=logit))
+
+
+reg_b1 <- stepAIC(regg_s,scope=list(lower=formula(regg_s),upper=formula(regg_f)),direction='both', k=2)
+summary(reg_b1)
+head(reg_b1$model)
+reg_b2 <- stepAIC(regg_s,scope=list(lower=formula(regg_s),upper=formula(regg_f)),direction="backward", k=2)
+summary(reg_b2)
+head(reg_b2$model)
+reg_b3 <- stepAIC(regg_s,scope=list(lower=formula(regg_s),upper=formula(regg_f)),direction="forward", k=2)
+summary(reg_b3)
+head(reg_b3$model)
+reg.choo.model <- glm(Survived ~ Age + Sex + Pclass+ SibSp, family = binomial(link = logit), data = train)
+AIC(reg.choo.model)
+
+```
+
+
+```{r}
+##C##
+sex <- dummy(train_b$Sex,sep = " ")
+train_b$Male <-sex[,2]
+pclass<-dummy(train_b$Pclass,sep=" ")
+train_b$class1<-pclass[,1]
+train_b$class2<-pclass[,2]
+
+train_b <- train_b %>% dplyr::select("Survived","Age","Male","class1", "class2","SibSp","Parch")
+train_b$Survived <- as.numeric(train_b$Survived)
+train_b$Age <- as.numeric(train_b$Age)
+train_b$Male <- as.numeric(train_b$Male)
+train_b$class1 <- as.numeric(train_b$class1)
+train_b$SibSp <- as.numeric(train_b$SibSp)
+train_b$class2 <- as.numeric(train_b$class2)
+train_b$Parch <- as.numeric(train_b$Parch)
+
+titanic <- data.frame(Y = train_b[,"Survived"],sapply(train_b[,-1],FUN = function(x) scale(x = x,center = TRUE,scale = TRUE)))
+
+x_cor <- cor(titanic[,c("Age","Male","class1", "class2","SibSp","Parch")])
+
+x <- as.matrix(titanic[,c("Age","Male","class1", "class2","SibSp","Parch")])
+
+glm_scaled <- glm(Y ~ Age + Male + class1 + class2 + SibSp ,data = titanic,family = binomial(link = "logit"))
+
+x_w <- diag(glm_scaled$weights)
+
+xtwx <- t(x)%*%x_w%*%x
+
+xtwx_inv <- solve(xtwx)
+
+eigen_xtwx <- eigen(xtwx)
+
+cond_ind <- max(eigen_xtwx$values)/eigen_xtwx$values
+
+
+pi <- matrix(NA,5,5)
+for (j in 1:5) {
+  for (r in 1:5) {
+    pi[r,j] = eigen_xtwx$vectors[j,r]^2 / eigen_xtwx$values[r]
+  }
+  pi[,j] = pi[,j] / sum(pi[,j])
+}
+colnames(pi) <- c("Age","Male","class1", "class2","SibSp")
+a<-cbind(cond_ind,pi)
+a
+```
+
+
+```{r}
+##D##
+jpeg("rplot22.jpg")
+train_b%>%ggplot() +geom_boxplot(aes(x = as.factor(SibSp), y = Age))
+dev.off()
+jpeg("rplot23.jpg")
+train_b%>%ggplot() +geom_boxplot(aes(x = as.factor(class1), y = Age))
+dev.off()
+jpeg("rplot24.jpg")
+train_b%>%ggplot() +geom_boxplot(aes(x = as.factor(class2), y = Age))
+dev.off()
+jpeg("rplot25.jpg")
+train_b%>%ggplot() +geom_boxplot(aes(x = as.factor(Male), y = Age))
+dev.off()
+
+```
+
+
+```{r}
+##E##
+jpeg("rplot26.jpg")
+
+plot(density(resid(reg.choo.model, type='response')))
+res<- stdres(reg.choo.model)
+dev.off()
+jpeg("rplot27.jpg")
+plot(res,train_b$SibSp)
+dev.off()
+jpeg("rplot28.jpg")
+plot(res,train_b$Male)
+dev.off()
+jpeg("rplot29.jpg")
+plot(res,train_b$class1)
+dev.off()
+jpeg("rplot30.jpg")
+plot(res,train_b$class2)
+dev.off()
+jpeg("rplot31.jpg")
+plot(res,train_b$Age)
+dev.off()
+jpeg("rplot32.jpg")
+qqnorm(res)
+dev.off()
+```
+
+
+```{r}
+##F##
+model_1 <-glm(Survived  ~ class1+class2 + Male+ SibSp +Parch+ SibSp*Parch+Age+class1*Age+class2*Age, family=binomial(link='logit') ,data=train_b)
+model_1$aic
+
+model_2 <- glm(Survived  ~ class1+class2 + Male+ SibSp +Parch+ SibSp*Parch+Age+class1*Male+class2*Male, 
+family=binomial(link='logit') ,data=train_b)
+model_2$aic
+
+model_3 <-glm(Survived  ~ class1+class2 + Male+ SibSp +Parch+ SibSp*Parch+Age+class1*Parch+class2*Parch, family=binomial(link='logit') ,data=train_b) 
+model_3$aic
+
+model_4 <-glm(Survived  ~ class1+class2 + Male+ SibSp +Parch+ SibSp*Parch+Age+Age^2, family=binomial(link='logit') ,data=train_b) 
+model_4$aic
+
+```
+
+
+```{r}
+##G##
+
+r_y <- c(test$Survived)
+n<- length(r_y)
+t_y <- c(ifelse(predict(model_2, newdata=test, type="response")>0.5,1,0))
+check_suc <- ifelse(r_y==t_y,1,0)
+prec<- sum(check_suc)/n
+prec
+```
+
+
+```
+
